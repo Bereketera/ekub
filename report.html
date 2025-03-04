@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report - Ekub System</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Ekub Management System</h1>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="rounds.html">Rounds</a>
+      <a href="add-round.html">Add Round</a>
+      <a href="add-member.html">Add Member</a>
+      <a href="report.html">Report</a>
+      <a href="remaining-payments.html">Remaining Payments</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2>Report</h2>
+    <canvas id="reportChart"></canvas>
+  </main>
+
+  <script src="script.js"></script>
+  <script>
+    // Generate the chart
+    const ctx = document.getElementById("reportChart").getContext("2d");
+    const chart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: members.map(member => member.name),
+        datasets: [{
+          label: "Total Payment",
+          data: members.map(member => member.totalPayment),
+          backgroundColor: "rgba(1, 152, 121, 0.2)", /* Updated theme color */
+          borderColor: "rgba(1, 152, 121, 1)", /* Updated theme color */
+          borderWidth: 1
+        }, {
+          label: "Remaining Payment",
+          data: members.map(member => member.remainingPayment),
+          backgroundColor: "rgba(255, 99, 132, 0.2)",
+          borderColor: "rgba(255, 99, 132, 1)",
+          borderWidth: 1
+        }]
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
