@@ -10,14 +10,31 @@ function saveData() {
   localStorage.setItem("rounds", JSON.stringify(rounds));
 }
 
+// Function to recalculate totalPayment and remainingPayment for a member
+function recalculatePayments(memberId) {
+  const payment = payments.find(p => p.id === memberId);
+  if (payment) {
+    payment.totalPayment = 0;
+    for (let i = 0; i < rounds.length; i++) {
+      const roundKey = `round${i + 1}`;
+      if (payment[roundKey] && payment[roundKey].amount) {
+        payment.totalPayment += payment[roundKey].amount;
+      }
+    }
+    payment.remainingPayment = (payment.expectedPerWeek * rounds.length) - payment.totalPayment;
+  }
+}
+
 // Function to add a new round
 function addRound(date) {
   if (!date.startsWith("Round ")) {
     date = `Round ${date}`;
   }
+
   rounds.push(date);
   saveData();
   alert("Round Added!");
+  exportToCSV(); // Export tables after adding a round
   window.location.href = "rounds.html"; // Redirect to Rounds Page
 }
 
@@ -27,6 +44,9 @@ function deleteRound(index) {
     rounds.splice(index, 1);
     saveData();
     populateRoundsTable();
+    populateMembersTable();
+    populateRemainingPaymentsTable();
+    setTimeout(() => updateReportChart(), 0);
   }
 }
 
@@ -34,7 +54,6 @@ function deleteRound(index) {
 function populateMembersTable() {
   const table = document.getElementById("membersTable");
   if (!table) return;
-
   const tbody = table.getElementsByTagName("tbody")[0];
   tbody.innerHTML = ""; // Clear existing rows
 
@@ -81,7 +100,6 @@ function populateMembersTable() {
 function populateRoundsTable() {
   const table = document.getElementById("roundsTable");
   if (!table) return;
-
   const thead = table.getElementsByTagName("thead")[0];
   const tbody = table.getElementsByTagName("tbody")[0];
 
@@ -116,7 +134,6 @@ function populateRoundsTable() {
     const row = tbody.insertRow();
     row.insertCell(0).textContent = payment.id;
     row.insertCell(1).textContent = payment.name;
-
     rounds.forEach((round, index) => {
       const cell = row.insertCell(index + 2);
       const roundData = payment[`round${index + 1}`] || {};
@@ -134,6 +151,9 @@ function editRoundHeader(index) {
     rounds[index] = `Round ${newDate}`;
     saveData();
     populateRoundsTable();
+    populateMembersTable();
+    populateRemainingPaymentsTable();
+    setTimeout(() => updateReportChart(), 0);
   }
 }
 
@@ -145,16 +165,14 @@ function editRoundCell(memberId, roundIndex) {
     const currentRound = payment[roundKey] || {};
     const bank = prompt("Enter bank name:", currentRound.bank || "");
     const amount = parseFloat(prompt("Enter amount:", currentRound.amount || ""));
-
     if (bank && !isNaN(amount)) {
       payment[roundKey] = { bank, amount };
-      payment.totalPayment = Object.values(payment).reduce((sum, round) => sum + (round.amount || 0), 0);
-      payment.remainingPayment = (payment.expectedPerWeek * rounds.length) - payment.totalPayment;
+      recalculatePayments(memberId);
       saveData();
       populateMembersTable();
       populateRoundsTable();
       populateRemainingPaymentsTable();
-      updateReportChart(); // Update the report chart
+      setTimeout(() => updateReportChart(), 0); // Update the report chart
     }
   }
 }
@@ -163,7 +181,6 @@ function editRoundCell(memberId, roundIndex) {
 function populateRemainingPaymentsTable() {
   const table = document.getElementById("remainingPaymentsTable");
   if (!table) return;
-
   const tbody = table.getElementsByTagName("tbody")[0];
   tbody.innerHTML = ""; // Clear existing rows
 
@@ -189,7 +206,7 @@ function deleteMember(id) {
     populateMembersTable();
     populateRoundsTable();
     populateRemainingPaymentsTable();
-    updateReportChart(); // Update the report chart
+    setTimeout(() => updateReportChart(), 0); // Update the report chart
   }
 }
 
@@ -199,7 +216,6 @@ function editMember(id) {
   if (member) {
     const newName = prompt("Enter new name:", member.name);
     const newExpectedPerWeek = parseFloat(prompt("Enter new expected payment per week:", member.expectedPerWeek));
-
     if (newName && !isNaN(newExpectedPerWeek)) {
       member.name = newName;
       member.expectedPerWeek = newExpectedPerWeek;
@@ -209,14 +225,13 @@ function editMember(id) {
       if (payment) {
         payment.name = newName;
         payment.expectedPerWeek = newExpectedPerWeek;
-        payment.remainingPayment = (newExpectedPerWeek * rounds.length) - payment.totalPayment;
+        recalculatePayments(id);
       }
-
       saveData();
       populateMembersTable();
       populateRoundsTable();
       populateRemainingPaymentsTable();
-      updateReportChart(); // Update the report chart
+      setTimeout(() => updateReportChart(), 0); // Update the report chart
     }
   }
 }
@@ -231,7 +246,6 @@ function addMember(name, expectedPerWeek) {
     remainingPayment: expectedPerWeek * rounds.length,
   };
   members.push(newMember);
-
   const newPayment = {
     id: newMember.id,
     name,
@@ -241,9 +255,9 @@ function addMember(name, expectedPerWeek) {
     remainingPayment: expectedPerWeek * rounds.length,
   };
   payments.push(newPayment);
-
   saveData();
   alert("Member Added!");
+  exportToCSV(); // Export tables after adding a member
   document.getElementById("memberForm").reset(); // Clear the form
   window.location.href = "rounds.html"; // Redirect to Rounds Page
 }
@@ -251,9 +265,12 @@ function addMember(name, expectedPerWeek) {
 // Function to update the report chart
 function updateReportChart() {
   const ctx = document.getElementById("reportChart").getContext("2d");
+  if (!ctx) return; // Check if the chart element exists
+
   if (window.reportChart) {
     window.reportChart.destroy(); // Destroy the existing chart
   }
+
   window.reportChart = new Chart(ctx, {
     type: "bar",
     data: {
@@ -329,8 +346,58 @@ function importFromCSV(event) {
     reader.onload = function (e) {
       const text = e.target.result;
       const rows = text.split("\n");
-      // Parse the CSV and update the data (this is a basic example, you may need to handle more cases)
-      alert("CSV import functionality is not fully implemented yet.");
+
+      // Parse the CSV and update the data
+      rows.forEach((row, index) => {
+        // Skip the header row (index === 0) and empty rows
+        if (index === 0 || row.trim() === "") {
+          return;
+        }
+
+        const columns = row.split(",");
+
+        // Parse member data
+        const id = members.length + 1; // Auto-generate ID to avoid conflicts
+        const name = columns[1].trim();
+        const expectedPerWeek = parseFloat(columns[2].trim());
+        const totalPayment = parseFloat(columns[4].trim());
+        const remainingPayment = parseFloat(columns[5].trim());
+
+        // Check if the member already exists (by name or ID)
+        const existingMember = members.find(member => member.name === name);
+        if (existingMember) {
+          alert(`Member "${name}" already exists. Skipping duplicate.`);
+          return;
+        }
+
+        // Add new member
+        const newMember = {
+          id,
+          name,
+          expectedPerWeek,
+          totalPayment,
+          remainingPayment,
+        };
+        members.push(newMember);
+
+        // Add corresponding payment
+        const newPayment = {
+          id,
+          name,
+          expectedPerWeek,
+          totalPayment,
+          remainingPayment,
+          ...rounds.reduce((acc, _, index) => ({ ...acc, [`round${index + 1}`]: {} }), {}),
+        };
+        payments.push(newPayment);
+      });
+
+      saveData();
+      alert("CSV Imported Successfully!");
+      populateMembersTable();
+      populateRoundsTable();
+      populateRemainingPaymentsTable();
+      setTimeout(() => updateReportChart(), 0);
     };
     reader.readAsText(file);
   }
@@ -343,7 +410,6 @@ if (memberForm) {
     e.preventDefault();
     const name = document.getElementById("name").value;
     const expectedPerWeek = parseFloat(document.getElementById("expectedPerWeek").value);
-
     addMember(name, expectedPerWeek);
   });
 }
@@ -362,13 +428,12 @@ if (roundForm) {
 populateMembersTable();
 populateRoundsTable();
 populateRemainingPaymentsTable();
-updateReportChart(); // Initialize the report chart
+setTimeout(() => updateReportChart(), 0); // Initialize the report chart
 
 // Add export/import buttons to the home page
 const exportButton = document.getElementById("exportButton");
 const importButton = document.getElementById("importButton");
 const fileInput = document.getElementById("fileInput");
-
 if (exportButton && importButton && fileInput) {
   exportButton.addEventListener("click", exportToCSV);
   importButton.addEventListener("click", () => fileInput.click());
